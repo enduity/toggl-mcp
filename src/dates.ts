@@ -30,6 +30,14 @@ export function resolveDateRange(args: {
   now?: Date;
 }): { start_date: string; end_date: string } {
   const now = args.now ?? new Date();
+  const hasExplicit =
+    args.start_date !== undefined || args.end_date !== undefined;
+
+  if (args.period && hasExplicit) {
+    throw new Error(
+      'Use either period ("today" | "yesterday") or start_date/end_date, not both.'
+    );
+  }
 
   if (args.period === 'today') {
     const start = startOfLocalDay(now);

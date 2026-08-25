@@ -40,6 +40,16 @@ describe('dates', () => {
     });
   });
 
+  it('rejects period combined with explicit dates', () => {
+    expect(() =>
+      resolveDateRange({
+        period: 'today',
+        start_date: '2026-08-01',
+        end_date: '2026-08-02',
+      })
+    ).toThrow(/not both/);
+  });
+
   it('chunks ids by size', () => {
     expect(chunkIds([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
   });
