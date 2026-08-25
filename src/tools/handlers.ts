@@ -38,6 +38,7 @@ const timeEntryCreateSchema = z
 export const addTimeEntriesInputSchema = z
   .object({
     entries: z.array(timeEntryCreateSchema).min(1),
+    conflict_policy: z.enum(['reject', 'skip']).optional(),
     workspace_id: z.union([z.number(), z.string()]).optional(),
   })
   .strict();
@@ -130,24 +131,34 @@ export async function handleAddTimeEntries(
   const args = addTimeEntriesInputSchema.parse(rawArgs ?? {});
   assertLockedWorkspace(client.getWorkspaceId(), args.workspace_id);
   const result = await client.createTimeEntries(
-    args.entries as CreateTimeEntryInput[]
+    args.entries as CreateTimeEntryInput[],
+    { conflict_policy: args.conflict_policy }
   );
-  const partial = result.error !== undefined;
+  const failed =
+    result.error !== undefined ||
+    result.code === 'TIME_ENTRY_CONFLICT' ||
+    result.code === 'TIME_ENTRY_BATCH_DUPLICATE';
   return jsonResult(
     {
       workspace_id: client.getWorkspaceId(),
+      conflict_policy: result.conflict_policy ?? args.conflict_policy ?? 'reject',
       count: result.entries.length,
       entries: result.entries,
-      ...(partial
+      results: result.results,
+      ...(result.code ? { code: result.code, message: result.message } : {}),
+      ...(result.error
         ? {
-            partial: true,
+            partial: result.entries.length > 0,
             failed_at_index: result.failed_at_index,
             remaining_count: result.remaining_count,
+            created_input_indexes: result.created_input_indexes,
+            duplicate_input_indexes: result.duplicate_input_indexes,
+            not_attempted_input_indexes: result.not_attempted_input_indexes,
             error: result.error,
           }
         : {}),
     },
-    partial
+    failed
   );
 }
 

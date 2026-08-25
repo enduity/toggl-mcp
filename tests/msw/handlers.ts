@@ -65,6 +65,16 @@ export function defaultHandlers(recorder?: ReturnType<typeof createRecorder>) {
       );
     }),
 
+    http.get(`${API}/me/time_entries/current`, ({ request }) => {
+      recorder?.record(request);
+      return HttpResponse.json(null, {
+        headers: {
+          'x-toggl-quota-remaining': '8',
+          'x-toggl-quota-resets-in': '3599',
+        },
+      });
+    }),
+
     http.get(`${API}/me/time_entries`, ({ request }) => {
       recorder?.record(request);
       return HttpResponse.json(

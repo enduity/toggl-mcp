@@ -61,8 +61,30 @@ export type PatchOutput = {
 
 export type BulkCreateResult = {
   entries: TimeEntry[];
+  results: Array<{
+    index: number;
+    status:
+      | 'created'
+      | 'duplicate'
+      | 'conflict'
+      | 'failed'
+      | 'skipped'
+      | 'not_attempted';
+    entry?: TimeEntry;
+    existing_entry_id?: number;
+    conflicting_existing_ids?: number[];
+    conflicting_input_indexes?: number[];
+    start?: string;
+    end?: string | null;
+  }>;
+  conflict_policy?: 'reject' | 'skip';
   failed_at_index?: number;
   remaining_count?: number;
+  created_input_indexes?: number[];
+  duplicate_input_indexes?: number[];
+  not_attempted_input_indexes?: number[];
+  code?: string;
+  message?: string;
   error?: {
     message: string;
     code?: string;

@@ -59,11 +59,13 @@ For local development without publishing:
 | --- | --- |
 | `toggl_get_time_entries` | List entries (`today` / `yesterday` or `start_date`+`end_date`); `meta=true`; filtered to the locked workspace |
 | `toggl_list_projects` | List projects (in-memory TTL cache) |
-| `toggl_add_time_entries` | Bulk create: one Toggl `POST` per entry through the queue |
+| `toggl_add_time_entries` | Bulk create after conflict preflight (skip exact duplicates; default `conflict_policy=reject` aborts on overlaps) |
 | `toggl_update_time_entries` | Bulk edit via `PATCH` JSON Patch (max 100 IDs per request, chunked) |
 | `toggl_remove_time_entry` | Delete one entry |
 
 Create is not available through PATCH. Toggl's bulk PATCH only edits existing IDs (`op: "add"` means add a field, not a new entry).
+
+Bulk create preflight loads existing entries in a window (24h lookback from the earliest start, plus the current timer) and uses half-open intervals `[start, end)`. Exact duplicates of existing entries are skipped; overlaps fail the whole batch unless `conflict_policy` is `skip`. Touching endpoints (`end == next.start`) are allowed. Completed entries only – no open-ended creates.
 
 ## Rate limiting
 

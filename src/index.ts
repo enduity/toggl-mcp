@@ -90,7 +90,7 @@ server.registerTool(
   'toggl_add_time_entries',
   {
     description:
-      'Bulk-create time entries. Each item becomes one POST through the rate-limit queue (API has no multi-create). On mid-batch failure, returns already-created entries plus error so retries can skip successes.',
+      'Bulk-create completed time entries after conflict preflight. Skips exact existing duplicates; default conflict_policy=reject aborts the whole batch on any overlap. Use skip to create only clean entries. Each create is one POST through the rate-limit queue.',
     inputSchema: {
       entries: z
         .array(
@@ -101,12 +101,20 @@ server.registerTool(
             billable: z.boolean().optional(),
             tags: z.array(z.string()).optional(),
             tag_ids: z.array(z.number()).optional(),
-            start: z.string().describe('UTC start, e.g. 2026-08-24T09:00:00Z'),
+            start: z
+              .string()
+              .describe('RFC3339 start with Z or offset, e.g. 2026-08-24T09:00:00Z'),
             stop: z.string().optional(),
             duration: z.number().optional(),
           })
         )
         .min(1),
+      conflict_policy: z
+        .enum(['reject', 'skip'])
+        .optional()
+        .describe(
+          'reject (default): abort on any overlap. skip: create only non-overlapping entries.'
+        ),
       workspace_id: workspaceIdField,
     },
   },

@@ -1,4 +1,12 @@
+import {
+  normalizeExistingList,
+  planCreates,
+  proposeEntries,
+  type BulkCreateItemResult,
+  type ConflictPolicy,
+} from './conflicts.js';
 import { chunkIds } from './dates.js';
+import { fetchWindowForProposed, normalizeExistingEntry } from './intervals.js';
 import {
   pickQuotaForOrganization,
   RequestQueue,
@@ -134,6 +142,16 @@ export class TogglClient {
     this.projectCache = null;
   }
 
+  async getCurrentTimeEntry(): Promise<TimeEntry | null> {
+    await this.ensureQuota();
+    const result = await this.request<TimeEntry | null>(
+      'GET',
+      '/me/time_entries/current'
+    );
+    if (!result || result.workspace_id !== this.workspaceId) return null;
+    return result;
+  }
+
   async createTimeEntry(input: CreateTimeEntryInput): Promise<TimeEntry> {
     await this.ensureQuota();
     const body = {
@@ -148,21 +166,112 @@ export class TogglClient {
     );
   }
 
-  async createTimeEntries(inputs: CreateTimeEntryInput[]): Promise<BulkCreateResult> {
-    const entries: TimeEntry[] = [];
-    for (let index = 0; index < inputs.length; index++) {
+  async createTimeEntries(
+    inputs: CreateTimeEntryInput[],
+    options: { conflict_policy?: ConflictPolicy } = {}
+  ): Promise<BulkCreateResult> {
+    const policy = options.conflict_policy ?? 'reject';
+    const proposed = proposeEntries(inputs);
+    const window = fetchWindowForProposed(proposed);
+
+    const listed = await this.getTimeEntries(window);
+    const current = await this.getCurrentTimeEntry();
+
+    const existingEntries = [...listed];
+    if (current && !existingEntries.some((entry) => entry.id === current.id)) {
+      existingEntries.push(current);
+    }
+
+    let existing = normalizeExistingList(existingEntries);
+    const plan = planCreates({ proposed, existing, policy });
+
+    if (plan.malformedBatchDuplicates) {
+      return {
+        entries: [],
+        results: plan.results,
+        conflict_policy: policy,
+        code: 'TIME_ENTRY_BATCH_DUPLICATE',
+        message:
+          'Submitted batch contains duplicate entries. No entries were created.',
+        error: {
+          message:
+            'Submitted batch contains duplicate entries. No entries were created.',
+          code: 'TIME_ENTRY_BATCH_DUPLICATE',
+        },
+      };
+    }
+
+    if (policy === 'reject' && plan.hasConflicts) {
+      return {
+        entries: [],
+        results: plan.results,
+        conflict_policy: policy,
+        code: 'TIME_ENTRY_CONFLICT',
+        message: 'No entries were created due to overlapping time ranges.',
+        error: {
+          message: 'No entries were created due to overlapping time ranges.',
+          code: 'TIME_ENTRY_CONFLICT',
+        },
+      };
+    }
+
+    const results: BulkCreateItemResult[] = plan.results.map((r) => ({ ...r }));
+    const created: TimeEntry[] = [];
+    const createdIndexes: number[] = [];
+
+    for (const index of plan.creatableIndexes) {
+      const item = proposed.find((p) => p.index === index)!;
       try {
-        entries.push(await this.createTimeEntry(inputs[index]!));
+        const entry = await this.createTimeEntry(item.input);
+        created.push(entry);
+        createdIndexes.push(index);
+        results[index] = {
+          index,
+          status: 'created',
+          entry,
+          start: item.startIso,
+          end: item.endIso,
+        };
+        existing = [...existing, normalizeExistingEntry(entry)];
       } catch (error) {
+        results[index] = {
+          index,
+          status: 'failed',
+          start: item.startIso,
+          end: item.endIso,
+        };
+        for (const later of plan.creatableIndexes) {
+          if (later > index && results[later]?.status === 'not_attempted') {
+            results[later] = { ...results[later]!, status: 'not_attempted' };
+          }
+        }
         return {
-          entries,
+          entries: created,
+          results,
+          conflict_policy: policy,
           failed_at_index: index,
-          remaining_count: inputs.length - index,
+          remaining_count: inputs.length - created.length,
+          created_input_indexes: createdIndexes,
+          duplicate_input_indexes: results
+            .filter((r) => r.status === 'duplicate')
+            .map((r) => r.index),
+          not_attempted_input_indexes: results
+            .filter((r) => r.status === 'not_attempted')
+            .map((r) => r.index),
           error: serializeCaughtError(error),
         };
       }
     }
-    return { entries };
+
+    return {
+      entries: created,
+      results,
+      conflict_policy: policy,
+      created_input_indexes: createdIndexes,
+      duplicate_input_indexes: results
+        .filter((r) => r.status === 'duplicate')
+        .map((r) => r.index),
+    };
   }
 
   async patchTimeEntries(ids: number[], ops: PatchOp[]): Promise<PatchOutput> {

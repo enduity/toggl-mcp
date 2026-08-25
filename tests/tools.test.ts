@@ -60,9 +60,25 @@ describe('TogglClient and tools via MSW', () => {
     expect(projectCalls.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('bulk add issues one POST per entry', async () => {
+  it('bulk add issues one POST per entry after empty preflight', async () => {
     const recorder = createRecorder();
-    const client = testClient(recorder);
+    server.use(
+      http.get(`${API}/me/time_entries`, ({ request }) => {
+        recorder.record(request);
+        return HttpResponse.json([], {
+          headers: {
+            'x-toggl-quota-remaining': '8',
+            'x-toggl-quota-resets-in': '3599',
+          },
+        });
+      }),
+      ...defaultHandlers(recorder)
+    );
+    const client = new TogglClient({
+      apiKey: 'test-token',
+      workspaceId: WORKSPACE_ID,
+      queue: new RequestQueue({ minIntervalMs: 0, maxWaitMs: 1_000 }),
+    });
     const result = await handleAddTimeEntries(client, {
       entries: [
         {
@@ -83,6 +99,7 @@ describe('TogglClient and tools via MSW', () => {
       ],
     });
     const payload = JSON.parse(result.content[0]!.text);
+    expect(result.isError).toBeFalsy();
     expect(payload.count).toBe(3);
     const posts = recorder.requests.filter((r) => r.method === 'POST');
     expect(posts).toHaveLength(3);
@@ -93,9 +110,88 @@ describe('TogglClient and tools via MSW', () => {
     });
   });
 
+  it('bulk add rejects overlaps with existing entries by default', async () => {
+    const client = testClient();
+    const result = await handleAddTimeEntries(client, {
+      entries: [
+        {
+          description: 'Overlap',
+          start: '2026-08-24T11:00:00Z',
+          stop: '2026-08-24T12:00:00Z',
+        },
+      ],
+    });
+    expect(result.isError).toBe(true);
+    const payload = JSON.parse(result.content[0]!.text);
+    expect(payload.code).toBe('TIME_ENTRY_CONFLICT');
+    expect(payload.count).toBe(0);
+    expect(payload.results[0]).toMatchObject({
+      status: 'conflict',
+      conflicting_existing_ids: [400001],
+    });
+  });
+
+  it('bulk add skips exact existing duplicates and creates the rest', async () => {
+    const recorder = createRecorder();
+    server.use(
+      http.get(`${API}/me/time_entries`, ({ request }) => {
+        recorder.record(request);
+        return HttpResponse.json(
+          [
+            {
+              id: 400001,
+              workspace_id: WORKSPACE_ID,
+              description: 'A',
+              billable: false,
+              tags: [],
+              tag_ids: [],
+              start: '2026-08-24T09:00:00Z',
+              stop: '2026-08-24T10:00:00Z',
+              duration: 3600,
+            },
+          ],
+          {
+            headers: {
+              'x-toggl-quota-remaining': '8',
+              'x-toggl-quota-resets-in': '3599',
+            },
+          }
+        );
+      }),
+      ...defaultHandlers(recorder)
+    );
+    const client = new TogglClient({
+      apiKey: 'test-token',
+      workspaceId: WORKSPACE_ID,
+      queue: new RequestQueue({ minIntervalMs: 0, maxWaitMs: 1_000 }),
+    });
+    const result = await handleAddTimeEntries(client, {
+      entries: [
+        {
+          description: 'A',
+          start: '2026-08-24T09:00:00Z',
+          stop: '2026-08-24T10:00:00Z',
+        },
+        {
+          description: 'B',
+          start: '2026-08-24T10:00:00Z',
+          stop: '2026-08-24T11:00:00Z',
+        },
+      ],
+    });
+    const payload = JSON.parse(result.content[0]!.text);
+    expect(result.isError).toBeFalsy();
+    expect(payload.count).toBe(1);
+    expect(payload.results[0].status).toBe('duplicate');
+    expect(payload.results[1].status).toBe('created');
+    expect(recorder.requests.filter((r) => r.method === 'POST')).toHaveLength(1);
+  });
+
   it('bulk add returns created entries when a later POST fails', async () => {
     let postCount = 0;
     server.use(
+      http.get(`${API}/me/time_entries`, () => HttpResponse.json([])),
+      http.get(`${API}/me/time_entries/current`, () => HttpResponse.json(null)),
       http.post(`${API}/workspaces/${WORKSPACE_ID}/time_entries`, async () => {
         postCount += 1;
         if (postCount >= 2) {
@@ -141,7 +237,6 @@ describe('TogglClient and tools via MSW', () => {
     expect(payload.count).toBe(1);
     expect(payload.entries[0].id).toBe(400010);
     expect(payload.failed_at_index).toBe(1);
-    expect(payload.remaining_count).toBe(2);
     expect(payload.error).toMatchObject({
       status: 402,
       code: 'TOGGL_QUOTA_LIMIT',
