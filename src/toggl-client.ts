@@ -12,6 +12,11 @@ import {
   normalizeExistingEntry,
 } from './intervals.js';
 import {
+  applyTimeEntryPatchOps,
+  putBodyFromEntry,
+  requiresPutUpdate,
+} from './patch.js';
+import {
   pickQuotaForOrganization,
   RequestQueue,
   type QuotaSnapshot,
@@ -156,6 +161,20 @@ export class TogglClient {
     return result;
   }
 
+  async getTimeEntry(timeEntryId: number): Promise<TimeEntry> {
+    await this.ensureQuota();
+    const entry = await this.request<TimeEntry>(
+      'GET',
+      `/me/time_entries/${timeEntryId}`
+    );
+    if (entry.workspace_id !== this.workspaceId) {
+      throw new Error(
+        `Time entry ${timeEntryId} is not in the locked workspace`
+      );
+    }
+    return entry;
+  }
+
   async createTimeEntry(input: CreateTimeEntryInput): Promise<TimeEntry> {
     await this.ensureQuota();
     const body = {
@@ -290,7 +309,24 @@ export class TogglClient {
     return this.request<PatchOutput>('PATCH', path, ops);
   }
 
+  async putTimeEntry(entry: TimeEntry): Promise<TimeEntry> {
+    await this.ensureQuota();
+    return this.request<TimeEntry>(
+      'PUT',
+      `/workspaces/${this.workspaceId}/time_entries/${entry.id}`,
+      putBodyFromEntry(entry, this.workspaceId)
+    );
+  }
+
+  /**
+   * Apply JSON Patch ops. Meta-only ops use bulk PATCH. Ops that touch
+   * start/stop/duration use GET+PUT per id (Toggl bulk PATCH rejects those).
+   */
   async updateTimeEntries(ids: number[], ops: PatchOp[]): Promise<PatchOutput> {
+    if (requiresPutUpdate(ops)) {
+      return this.updateTimeEntriesViaPut(ids, ops);
+    }
+
     const merged: PatchOutput = { success: [], failure: [] };
     for (const chunk of chunkIds(ids, 100)) {
       const result = await this.patchTimeEntries(chunk, ops);
@@ -298,6 +334,30 @@ export class TogglClient {
       merged.failure.push(...(result.failure ?? []));
     }
     return merged;
+  }
+
+  private async updateTimeEntriesViaPut(
+    ids: number[],
+    ops: PatchOp[]
+  ): Promise<PatchOutput> {
+    const success: number[] = [];
+    const failure: Array<{ id: number; message: string }> = [];
+
+    for (const id of ids) {
+      try {
+        const current = await this.getTimeEntry(id);
+        const next = applyTimeEntryPatchOps(current, ops);
+        await this.putTimeEntry(next);
+        success.push(id);
+      } catch (error) {
+        failure.push({
+          id,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return { success, failure };
   }
 
   async deleteTimeEntry(timeEntryId: number): Promise<void> {

@@ -257,6 +257,41 @@ describe('TogglClient and tools via MSW', () => {
     expect(patches[0]!.pathname).toContain('/time_entries/400001,400002');
   });
 
+  it('routes start/stop updates through PUT with UTC timestamps', async () => {
+    const recorder = createRecorder();
+    const client = testClient(recorder);
+    const result = await handleUpdateTimeEntries(client, {
+      time_entry_ids: [400001],
+      operations: [
+        { op: 'replace', path: '/description', value: 'MR !46 Review' },
+        {
+          op: 'replace',
+          path: '/start',
+          value: '2026-08-24T11:14:10+03:00',
+        },
+        {
+          op: 'replace',
+          path: '/stop',
+          value: '2026-08-24T11:49:10+03:00',
+        },
+        { op: 'replace', path: '/project_id', value: 205953115 },
+      ],
+    });
+    const payload = JSON.parse(result.content[0]!.text);
+    expect(payload.success).toEqual([400001]);
+    expect(payload.failure).toEqual([]);
+    expect(recorder.requests.some((r) => r.method === 'PATCH')).toBe(false);
+    const puts = recorder.requests.filter((r) => r.method === 'PUT');
+    expect(puts).toHaveLength(1);
+    expect(puts[0]!.body).toMatchObject({
+      description: 'MR !46 Review',
+      project_id: 205953115,
+      start: '2026-08-24T08:14:10.000Z',
+      stop: '2026-08-24T08:49:10.000Z',
+      duration: 2100,
+    });
+  });
+
   it('POSTs create payloads with UTC start/stop', async () => {
     const recorder = createRecorder();
     server.use(

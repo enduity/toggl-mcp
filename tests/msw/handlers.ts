@@ -142,6 +142,56 @@ export function defaultHandlers(recorder?: ReturnType<typeof createRecorder>) {
       );
     }),
 
+    http.get(`${API}/me/time_entries/:id`, ({ request, params }) => {
+      recorder?.record(request);
+      const id = Number.parseInt(String(params.id), 10);
+      return HttpResponse.json(
+        {
+          id,
+          workspace_id: WORKSPACE_ID,
+          project_id: 500001,
+          description: 'Existing',
+          billable: false,
+          tags: [],
+          tag_ids: [],
+          start: '2026-08-24T08:00:00+00:00',
+          stop: '2026-08-24T09:00:00+00:00',
+          duration: 3600,
+        },
+        {
+          headers: {
+            'x-toggl-quota-remaining': '6',
+            'x-toggl-quota-resets-in': '3590',
+          },
+        }
+      );
+    }),
+
+    http.put(
+      `${API}/workspaces/${WORKSPACE_ID}/time_entries/:id`,
+      async ({ request, params }) => {
+        const body = await request.json();
+        recorder?.record(request, body);
+        const id = Number.parseInt(String(params.id), 10);
+        const payload = body as Record<string, unknown>;
+        return HttpResponse.json(
+          {
+            id,
+            workspace_id: WORKSPACE_ID,
+            ...payload,
+            duration:
+              typeof payload.duration === 'number' ? payload.duration : 3600,
+          },
+          {
+            headers: {
+              'x-toggl-quota-remaining': '5',
+              'x-toggl-quota-resets-in': '3588',
+            },
+          }
+        );
+      }
+    ),
+
     http.post(`${API}/workspaces/${WORKSPACE_ID}/time_entries`, async ({ request }) => {
       const body = await request.json();
       recorder?.record(request, body);
