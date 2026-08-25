@@ -57,7 +57,7 @@ For local development without publishing:
 
 | Tool | Purpose |
 | --- | --- |
-| `toggl_get_time_entries` | List entries (`today` / `yesterday` or `start_date`+`end_date`); `meta=true`; filtered to the locked workspace |
+| `toggl_get_time_entries` | List entries (`today` / `yesterday` or `start_date`+`end_date`); equal date-only bounds are auto-expanded; `meta=true`; locked workspace |
 | `toggl_list_projects` | List projects (in-memory TTL cache) |
 | `toggl_add_time_entries` | Bulk create after conflict preflight (skip exact duplicates; default `conflict_policy=reject` aborts on overlaps) |
 | `toggl_update_time_entries` | Bulk edit via `PATCH` JSON Patch (max 100 IDs per request, chunked) |

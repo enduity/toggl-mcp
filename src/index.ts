@@ -56,7 +56,10 @@ server.registerTool(
     inputSchema: {
       period: z.enum(['today', 'yesterday']).optional(),
       start_date: z.string().optional().describe('YYYY-MM-DD or RFC3339'),
-      end_date: z.string().optional().describe('YYYY-MM-DD or RFC3339 (exclusive for date-only)'),
+      end_date: z
+        .string()
+        .optional()
+        .describe('YYYY-MM-DD or RFC3339'),
       workspace_id: workspaceIdField,
     },
   },

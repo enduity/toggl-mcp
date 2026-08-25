@@ -19,16 +19,21 @@ export function addLocalDays(date: Date, days: number): Date {
 }
 
 /**
- * Resolve period shortcuts or explicit dates to inclusive start / exclusive end
- * as YYYY-MM-DD for Toggl's start_date / end_date query params.
- * Toggl treats end_date as exclusive for date-only values.
+ * Resolve period shortcuts or explicit dates to Toggl start_date / end_date.
+ * Toggl treats date-only end_date as exclusive (start=D, end=D+1 covers day D).
+ * If a date-only range has start_date === end_date (empty window), bump end by
+ * one day so a single calendar day works without callers learning that.
  */
 export function resolveDateRange(args: {
   period?: 'today' | 'yesterday';
   start_date?: string;
   end_date?: string;
   now?: Date;
-}): { start_date: string; end_date: string } {
+}): {
+  start_date: string;
+  end_date: string;
+  expandedZeroDayRange?: boolean;
+} {
   const now = args.now ?? new Date();
   const hasExplicit =
     args.start_date !== undefined || args.end_date !== undefined;
@@ -57,11 +62,31 @@ export function resolveDateRange(args: {
 
   if (!args.start_date || !args.end_date) {
     throw new Error(
-      'Provide period ("today" | "yesterday") or both start_date and end_date (YYYY-MM-DD).'
+      'Provide period ("today" | "yesterday") or both start_date and end_date.'
     );
   }
 
+  if (
+    isDateOnly(args.start_date) &&
+    isDateOnly(args.end_date) &&
+    args.start_date === args.end_date
+  ) {
+    const [year, month, day] = args.end_date.split('-').map(Number);
+    const end = new Date(year!, month! - 1, day!);
+    return {
+      start_date: args.start_date,
+      end_date: toLocalYmd(addLocalDays(end, 1)),
+      expandedZeroDayRange: true,
+    };
+  }
+
   return { start_date: args.start_date, end_date: args.end_date };
+}
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function isDateOnly(value: string): boolean {
+  return DATE_ONLY.test(value);
 }
 
 export function chunkIds(ids: number[], size: number): number[][] {

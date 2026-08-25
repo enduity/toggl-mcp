@@ -50,6 +50,43 @@ describe('dates', () => {
     ).toThrow(/not both/);
   });
 
+  it('expands equal date-only start/end by one day', () => {
+    expect(
+      resolveDateRange({
+        start_date: '2026-08-24',
+        end_date: '2026-08-24',
+      })
+    ).toEqual({
+      start_date: '2026-08-24',
+      end_date: '2026-08-25',
+      expandedZeroDayRange: true,
+    });
+  });
+
+  it('leaves normal exclusive date ranges unchanged', () => {
+    expect(
+      resolveDateRange({
+        start_date: '2026-08-24',
+        end_date: '2026-08-25',
+      })
+    ).toEqual({
+      start_date: '2026-08-24',
+      end_date: '2026-08-25',
+    });
+  });
+
+  it('leaves RFC3339 end_date unchanged', () => {
+    expect(
+      resolveDateRange({
+        start_date: '2026-08-24T00:00:00Z',
+        end_date: '2026-08-24T23:59:59Z',
+      })
+    ).toEqual({
+      start_date: '2026-08-24T00:00:00Z',
+      end_date: '2026-08-24T23:59:59Z',
+    });
+  });
+
   it('chunks ids by size', () => {
     expect(chunkIds([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
   });

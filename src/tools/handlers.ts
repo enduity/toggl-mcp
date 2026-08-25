@@ -104,7 +104,8 @@ export async function handleGetTimeEntries(
   const entries = await client.getTimeEntries(range);
   return jsonResult({
     workspace_id: client.getWorkspaceId(),
-    ...range,
+    start_date: range.start_date,
+    end_date: range.end_date,
     count: entries.length,
     entries,
   });
