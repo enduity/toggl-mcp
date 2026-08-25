@@ -90,7 +90,7 @@ server.registerTool(
   'toggl_add_time_entries',
   {
     description:
-      'Bulk-create time entries. Each item becomes one POST through the rate-limit queue (API has no multi-create).',
+      'Bulk-create time entries. Each item becomes one POST through the rate-limit queue (API has no multi-create). On mid-batch failure, returns already-created entries plus error so retries can skip successes.',
     inputSchema: {
       entries: z
         .array(

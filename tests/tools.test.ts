@@ -93,6 +93,61 @@ describe('TogglClient and tools via MSW', () => {
     });
   });
 
+  it('bulk add returns created entries when a later POST fails', async () => {
+    let postCount = 0;
+    server.use(
+      http.post(`${API}/workspaces/${WORKSPACE_ID}/time_entries`, async () => {
+        postCount += 1;
+        if (postCount >= 2) {
+          return HttpResponse.text('quota will reset in 60 seconds', {
+            status: 402,
+          });
+        }
+        return HttpResponse.json({
+          id: 400010,
+          workspace_id: WORKSPACE_ID,
+          description: 'A',
+          start: '2026-08-24T09:00:00Z',
+          stop: '2026-08-24T10:00:00Z',
+          duration: 3600,
+        });
+      })
+    );
+
+    const client = testClient();
+    const result = await handleAddTimeEntries(client, {
+      entries: [
+        {
+          description: 'A',
+          start: '2026-08-24T09:00:00Z',
+          stop: '2026-08-24T10:00:00Z',
+        },
+        {
+          description: 'B',
+          start: '2026-08-24T10:00:00Z',
+          stop: '2026-08-24T11:00:00Z',
+        },
+        {
+          description: 'C',
+          start: '2026-08-24T11:00:00Z',
+          stop: '2026-08-24T12:00:00Z',
+        },
+      ],
+    });
+
+    expect(result.isError).toBe(true);
+    const payload = JSON.parse(result.content[0]!.text);
+    expect(payload.partial).toBe(true);
+    expect(payload.count).toBe(1);
+    expect(payload.entries[0].id).toBe(400010);
+    expect(payload.failed_at_index).toBe(1);
+    expect(payload.remaining_count).toBe(2);
+    expect(payload.error).toMatchObject({
+      status: 402,
+      code: 'TOGGL_QUOTA_LIMIT',
+    });
+  });
+
   it('bulk edit issues one PATCH for two ids', async () => {
     const recorder = createRecorder();
     const client = testClient(recorder);

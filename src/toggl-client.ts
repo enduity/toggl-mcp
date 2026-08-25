@@ -5,6 +5,7 @@ import {
   type QuotaSnapshot,
 } from './rate-limiter.js';
 import type {
+  BulkCreateResult,
   CreateTimeEntryInput,
   PatchOp,
   PatchOutput,
@@ -147,12 +148,21 @@ export class TogglClient {
     );
   }
 
-  async createTimeEntries(inputs: CreateTimeEntryInput[]): Promise<TimeEntry[]> {
-    const created: TimeEntry[] = [];
-    for (const input of inputs) {
-      created.push(await this.createTimeEntry(input));
+  async createTimeEntries(inputs: CreateTimeEntryInput[]): Promise<BulkCreateResult> {
+    const entries: TimeEntry[] = [];
+    for (let index = 0; index < inputs.length; index++) {
+      try {
+        entries.push(await this.createTimeEntry(inputs[index]!));
+      } catch (error) {
+        return {
+          entries,
+          failed_at_index: index,
+          remaining_count: inputs.length - index,
+          error: serializeCaughtError(error),
+        };
+      }
     }
-    return created;
+    return { entries };
   }
 
   async patchTimeEntries(ids: number[], ops: PatchOp[]): Promise<PatchOutput> {
@@ -262,4 +272,28 @@ function parseQuotaResetSeconds(text: string): number | undefined {
   if (!match) return undefined;
   const seconds = Number.parseInt(match[1]!, 10);
   return Number.isFinite(seconds) ? seconds : undefined;
+}
+
+function serializeCaughtError(error: unknown): BulkCreateResult['error'] {
+  if (error instanceof TogglApiError) {
+    return {
+      message: error.message,
+      code: error.code,
+      status: error.status,
+      retry_after_seconds: error.retry_after_seconds,
+    };
+  }
+  if (error && typeof error === 'object') {
+    const e = error as Record<string, unknown>;
+    return {
+      message: error instanceof Error ? error.message : String(error),
+      code: typeof e.code === 'string' ? e.code : undefined,
+      status: typeof e.status === 'number' ? e.status : undefined,
+      retry_after_seconds:
+        typeof e.retry_after_seconds === 'number' ? e.retry_after_seconds : undefined,
+    };
+  }
+  return {
+    message: error instanceof Error ? error.message : String(error),
+  };
 }

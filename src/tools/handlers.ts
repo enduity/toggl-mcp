@@ -129,14 +129,26 @@ export async function handleAddTimeEntries(
 ): Promise<ToolResult> {
   const args = addTimeEntriesInputSchema.parse(rawArgs ?? {});
   assertLockedWorkspace(client.getWorkspaceId(), args.workspace_id);
-  const created = await client.createTimeEntries(
+  const result = await client.createTimeEntries(
     args.entries as CreateTimeEntryInput[]
   );
-  return jsonResult({
-    workspace_id: client.getWorkspaceId(),
-    count: created.length,
-    entries: created,
-  });
+  const partial = result.error !== undefined;
+  return jsonResult(
+    {
+      workspace_id: client.getWorkspaceId(),
+      count: result.entries.length,
+      entries: result.entries,
+      ...(partial
+        ? {
+            partial: true,
+            failed_at_index: result.failed_at_index,
+            remaining_count: result.remaining_count,
+            error: result.error,
+          }
+        : {}),
+    },
+    partial
+  );
 }
 
 export async function handleUpdateTimeEntries(

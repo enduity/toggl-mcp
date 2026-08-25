@@ -59,6 +59,18 @@ export type PatchOutput = {
   failure: Array<{ id: number; message: string }>;
 };
 
+export type BulkCreateResult = {
+  entries: TimeEntry[];
+  failed_at_index?: number;
+  remaining_count?: number;
+  error?: {
+    message: string;
+    code?: string;
+    status?: number;
+    retry_after_seconds?: number;
+  };
+};
+
 export class TogglApiError extends Error {
   readonly status: number;
   readonly code: string;
