@@ -6,9 +6,14 @@ export const MAX_COMPLETED_ENTRY_MS = 24 * 60 * 60 * 1000;
 const HAS_OFFSET = /(Z|[+-]\d{2}:\d{2})(\.\d+)?$/i;
 
 export type NormalizedInterval = {
+  /** Exact start instant (ms). */
   startMs: number;
-  /** Exclusive end. Infinity for running entries. */
+  /** Exact exclusive end. Infinity for running entries. */
   endMs: number;
+  /** Minute-floored start used for overlap/duplicate checks. */
+  compareStartMs: number;
+  /** Minute-floored exclusive end used for overlap/duplicate checks. */
+  compareEndMs: number;
   startIso: string;
   endIso: string | null;
   contentKey: string;
@@ -86,6 +91,22 @@ export function intervalsOverlap(
   return aStart < bEnd && bStart < aEnd;
 }
 
+/** Floor an instant to the UTC minute for conflict checks. */
+export function floorToMinute(ms: number): number {
+  if (!Number.isFinite(ms)) return ms;
+  return Math.floor(ms / 60_000) * 60_000;
+}
+
+function comparisonBounds(startMs: number, endMs: number): {
+  compareStartMs: number;
+  compareEndMs: number;
+} {
+  return {
+    compareStartMs: floorToMinute(startMs),
+    compareEndMs: Number.isFinite(endMs) ? floorToMinute(endMs) : endMs,
+  };
+}
+
 export function normalizeCreateInput(input: CreateTimeEntryInput): NormalizedInterval {
   const startMs = parseRfc3339(input.start);
 
@@ -132,6 +153,7 @@ export function normalizeCreateInput(input: CreateTimeEntryInput): NormalizedInt
   return {
     startMs,
     endMs,
+    ...comparisonBounds(startMs, endMs),
     startIso: new Date(startMs).toISOString(),
     endIso: new Date(endMs).toISOString(),
     contentKey: contentKeyFromFields(input),
@@ -160,6 +182,7 @@ export function normalizeExistingEntry(entry: TimeEntry): ExistingNormalized {
     id: entry.id,
     startMs,
     endMs,
+    ...comparisonBounds(startMs, endMs),
     startIso: new Date(startMs).toISOString(),
     endIso,
     contentKey: contentKeyFromFields(entry),
@@ -171,9 +194,21 @@ export function isExactDuplicate(
   b: NormalizedInterval
 ): boolean {
   return (
-    a.startMs === b.startMs &&
-    a.endMs === b.endMs &&
+    a.compareStartMs === b.compareStartMs &&
+    a.compareEndMs === b.compareEndMs &&
     a.contentKey === b.contentKey
+  );
+}
+
+export function entriesOverlap(
+  a: NormalizedInterval,
+  b: NormalizedInterval
+): boolean {
+  return intervalsOverlap(
+    a.compareStartMs,
+    a.compareEndMs,
+    b.compareStartMs,
+    b.compareEndMs
   );
 }
 

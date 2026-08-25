@@ -8,6 +8,7 @@ import {
 } from '../src/conflicts.js';
 import {
   fetchWindowForProposed,
+  entriesOverlap,
   intervalsOverlap,
   normalizeCreateInput,
   normalizeExistingEntry,
@@ -25,6 +26,29 @@ describe('intervals', () => {
   it('treats touching endpoints as non-overlapping', () => {
     expect(intervalsOverlap(0, 10, 10, 20)).toBe(false);
     expect(intervalsOverlap(0, 10, 9, 20)).toBe(true);
+  });
+
+  it('compares conflicts at minute precision', () => {
+    const first = normalizeCreateInput({
+      start: '2026-08-24T10:00:00Z',
+      stop: '2026-08-24T11:00:17Z',
+      description: 'A',
+    });
+    const second = normalizeCreateInput({
+      start: '2026-08-24T11:00:00Z',
+      stop: '2026-08-24T11:35:00Z',
+      description: 'B',
+    });
+    expect(first.compareEndMs).toBe(Date.parse('2026-08-24T11:00:00.000Z'));
+    expect(second.compareStartMs).toBe(Date.parse('2026-08-24T11:00:00.000Z'));
+    expect(entriesOverlap(first, second)).toBe(false);
+
+    const overlapping = normalizeCreateInput({
+      start: '2026-08-24T10:59:00Z',
+      stop: '2026-08-24T11:30:00Z',
+      description: 'C',
+    });
+    expect(entriesOverlap(first, overlapping)).toBe(true);
   });
 
   it('normalizes create input and rejects open-ended entries', () => {
@@ -71,11 +95,12 @@ describe('intervals', () => {
     });
     expect(running.endMs).toBe(Number.POSITIVE_INFINITY);
     expect(
-      intervalsOverlap(
-        Date.parse('2026-08-24T09:00:00Z'),
-        Date.parse('2026-08-24T10:00:00Z'),
-        running.startMs,
-        running.endMs
+      entriesOverlap(
+        normalizeCreateInput({
+          start: '2026-08-24T09:00:00Z',
+          stop: '2026-08-24T10:00:00Z',
+        }),
+        running
       )
     ).toBe(true);
   });

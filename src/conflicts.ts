@@ -1,5 +1,5 @@
 import {
-  intervalsOverlap,
+  entriesOverlap,
   isExactDuplicate,
   normalizeCreateInput,
   normalizeExistingEntry,
@@ -52,7 +52,7 @@ export function findWithinBatchIssues(proposed: ProposedEntry[]): {
         duplicatePairs.push([a.index, b.index]);
         continue;
       }
-      if (intervalsOverlap(a.startMs, a.endMs, b.startMs, b.endMs)) {
+      if (entriesOverlap(a, b)) {
         conflictPairs.push([a.index, b.index]);
       }
     }
@@ -77,9 +77,7 @@ export function classifyAgainstExisting(
       };
     }
 
-    const overlapping = existing.filter((other) =>
-      intervalsOverlap(item.startMs, item.endMs, other.startMs, other.endMs)
-    );
+    const overlapping = existing.filter((other) => entriesOverlap(item, other));
     if (overlapping.length > 0) {
       return {
         index: item.index,

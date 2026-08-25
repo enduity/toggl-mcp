@@ -65,7 +65,7 @@ For local development without publishing:
 
 Create is not available through PATCH. Toggl's bulk PATCH only edits existing IDs (`op: "add"` means add a field, not a new entry).
 
-Bulk create preflight loads existing entries in a window (24h lookback from the earliest start, plus the current timer) and uses half-open intervals `[start, end)`. Exact duplicates of existing entries are skipped; overlaps fail the whole batch unless `conflict_policy` is `skip`. Touching endpoints (`end == next.start`) are allowed. Completed entries only – no open-ended creates.
+Bulk create preflight loads existing entries in a window (24h lookback from the earliest start, plus the current timer) and compares half-open intervals `[start, end)` at **minute** precision (seconds are ignored, matching Toggl's UI). Exact duplicates of existing entries are skipped; overlaps fail the whole batch unless `conflict_policy` is `skip`. Touching minute endpoints (`end == next.start`) are allowed. Completed entries only – no open-ended creates.
 
 ## Rate limiting
 
