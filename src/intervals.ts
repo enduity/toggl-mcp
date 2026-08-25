@@ -45,6 +45,22 @@ export function parseRfc3339(value: string): number {
   return ms;
 }
 
+/** Convert any RFC3339 instant (Z or offset) to UTC `...Z` for the Toggl API. */
+export function toUtcRfc3339(value: string): string {
+  return new Date(parseRfc3339(value)).toISOString();
+}
+
+/** Rewrite start/stop to UTC Z before create (Toggl write path expects UTC). */
+export function canonicalizeCreateInput(
+  input: CreateTimeEntryInput
+): CreateTimeEntryInput {
+  return {
+    ...input,
+    start: toUtcRfc3339(input.start),
+    ...(input.stop !== undefined ? { stop: toUtcRfc3339(input.stop) } : {}),
+  };
+}
+
 export function toUtcYmd(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }

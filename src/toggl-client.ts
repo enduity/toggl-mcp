@@ -6,7 +6,11 @@ import {
   type ConflictPolicy,
 } from './conflicts.js';
 import { chunkIds } from './dates.js';
-import { fetchWindowForProposed, normalizeExistingEntry } from './intervals.js';
+import {
+  canonicalizeCreateInput,
+  fetchWindowForProposed,
+  normalizeExistingEntry,
+} from './intervals.js';
 import {
   pickQuotaForOrganization,
   RequestQueue,
@@ -157,7 +161,7 @@ export class TogglClient {
     const body = {
       workspace_id: this.workspaceId,
       created_with: CREATED_WITH,
-      ...input,
+      ...canonicalizeCreateInput(input),
     };
     return this.request<TimeEntry>(
       'POST',

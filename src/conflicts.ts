@@ -30,11 +30,18 @@ export type BulkCreateItemResult = {
 };
 
 export function proposeEntries(inputs: CreateTimeEntryInput[]): ProposedEntry[] {
-  return inputs.map((input, index) => ({
-    index,
-    input,
-    ...normalizeCreateInput(input),
-  }));
+  return inputs.map((raw, index) => {
+    const normalized = normalizeCreateInput(raw);
+    return {
+      index,
+      input: {
+        ...raw,
+        start: normalized.startIso,
+        ...(raw.stop !== undefined ? { stop: normalized.endIso! } : {}),
+      },
+      ...normalized,
+    };
+  });
 }
 
 export function findWithinBatchIssues(proposed: ProposedEntry[]): {

@@ -257,6 +257,43 @@ describe('TogglClient and tools via MSW', () => {
     expect(patches[0]!.pathname).toContain('/time_entries/400001,400002');
   });
 
+  it('POSTs create payloads with UTC start/stop', async () => {
+    const recorder = createRecorder();
+    server.use(
+      http.get(`${API}/me/time_entries`, ({ request }) => {
+        recorder.record(request);
+        return HttpResponse.json([], {
+          headers: {
+            'x-toggl-quota-remaining': '8',
+            'x-toggl-quota-resets-in': '3599',
+          },
+        });
+      }),
+      ...defaultHandlers(recorder)
+    );
+    const client = new TogglClient({
+      apiKey: 'test-token',
+      workspaceId: WORKSPACE_ID,
+      queue: new RequestQueue({ minIntervalMs: 0, maxWaitMs: 1_000 }),
+    });
+    const result = await handleAddTimeEntries(client, {
+      entries: [
+        {
+          description: 'Offset',
+          start: '2026-08-24T12:00:00+03:00',
+          stop: '2026-08-24T13:00:00+03:00',
+        },
+      ],
+    });
+    expect(result.isError).toBeFalsy();
+    const posts = recorder.requests.filter((r) => r.method === 'POST');
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.body).toMatchObject({
+      start: '2026-08-24T09:00:00.000Z',
+      stop: '2026-08-24T10:00:00.000Z',
+    });
+  });
+
   it('deletes a single time entry', async () => {
     const recorder = createRecorder();
     const client = testClient(recorder);
