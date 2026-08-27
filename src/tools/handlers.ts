@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { assertLockedWorkspace } from '../config.js';
-import { resolveDateRange } from '../dates.js';
+import { resolveDateRange, toTogglApiRange } from '../dates.js';
 import type { TogglClient } from '../toggl-client.js';
 import type { CreateTimeEntryInput, PatchOp } from '../types.js';
 
@@ -101,7 +101,7 @@ export async function handleGetTimeEntries(
   const args = getTimeEntriesInputSchema.parse(rawArgs ?? {});
   assertLockedWorkspace(client.getWorkspaceId(), args.workspace_id);
   const range = resolveDateRange(args);
-  const entries = await client.getTimeEntries(range);
+  const entries = await client.getTimeEntries(toTogglApiRange(range));
   return jsonResult({
     workspace_id: client.getWorkspaceId(),
     start_date: range.start_date,

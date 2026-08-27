@@ -45,6 +45,30 @@ describe('TogglClient and tools via MSW', () => {
     expect(listCall?.search).toContain('meta=true');
   });
 
+  it('queries Toggl with an exclusive end_date for an inclusive range', async () => {
+    const recorder = createRecorder();
+    const client = testClient(recorder);
+    await handleGetTimeEntries(client, {
+      start_date: '2026-08-18',
+      end_date: '2026-08-25',
+    });
+    const listCall = recorder.requests.find((r) =>
+      r.pathname.endsWith('/me/time_entries')
+    );
+    expect(listCall?.search).toContain('end_date=2026-08-26');
+  });
+
+  it('returns the inclusive start_date and end_date', async () => {
+    const client = testClient();
+    const result = await handleGetTimeEntries(client, {
+      start_date: '2026-08-18',
+      end_date: '2026-08-25',
+    });
+    const payload = JSON.parse(result.content[0]!.text);
+    expect(payload.start_date).toBe('2026-08-18');
+    expect(payload.end_date).toBe('2026-08-25');
+  });
+
   it('lists projects with one page request when a single page is returned', async () => {
     const recorder = createRecorder();
     const client = testClient(recorder);

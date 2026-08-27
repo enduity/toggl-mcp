@@ -52,14 +52,14 @@ server.registerTool(
   'toggl_get_time_entries',
   {
     description:
-      'List time entries for the locked workspace. Use period today/yesterday OR start_date+end_date (YYYY-MM-DD), not both. Always requests meta fields.',
+      'List time entries for the locked workspace. Use period today/yesterday OR start_date+end_date (inclusive YYYY-MM-DD), not both. Always requests meta fields.',
     inputSchema: {
       period: z.enum(['today', 'yesterday']).optional(),
       start_date: z.string().optional().describe('YYYY-MM-DD or RFC3339'),
       end_date: z
         .string()
         .optional()
-        .describe('YYYY-MM-DD or RFC3339'),
+        .describe('Inclusive YYYY-MM-DD or RFC3339'),
       workspace_id: workspaceIdField,
     },
   },

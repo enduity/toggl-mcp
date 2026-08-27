@@ -4,7 +4,7 @@ import {
   pickQuotaForOrganization,
   RequestQueue,
 } from '../src/rate-limiter.js';
-import { resolveDateRange, chunkIds } from '../src/dates.js';
+import { resolveDateRange, toTogglApiRange, chunkIds } from '../src/dates.js';
 
 describe('loadConfig', () => {
   it('requires API key and workspace id', () => {
@@ -32,11 +32,11 @@ describe('dates', () => {
     const now = new Date(2026, 7, 25, 15, 30, 0);
     expect(resolveDateRange({ period: 'today', now })).toEqual({
       start_date: '2026-08-25',
-      end_date: '2026-08-26',
+      end_date: '2026-08-25',
     });
     expect(resolveDateRange({ period: 'yesterday', now })).toEqual({
       start_date: '2026-08-24',
-      end_date: '2026-08-25',
+      end_date: '2026-08-24',
     });
   });
 
@@ -50,7 +50,16 @@ describe('dates', () => {
     ).toThrow(/not both/);
   });
 
-  it('expands equal date-only start/end by one day', () => {
+  it('rejects a date-only end before start', () => {
+    expect(() =>
+      resolveDateRange({
+        start_date: '2026-08-25',
+        end_date: '2026-08-24',
+      })
+    ).toThrow(/on or after start_date/);
+  });
+
+  it('keeps inclusive date-only ranges as given', () => {
     expect(
       resolveDateRange({
         start_date: '2026-08-24',
@@ -58,12 +67,8 @@ describe('dates', () => {
       })
     ).toEqual({
       start_date: '2026-08-24',
-      end_date: '2026-08-25',
-      expandedZeroDayRange: true,
+      end_date: '2026-08-24',
     });
-  });
-
-  it('leaves normal exclusive date ranges unchanged', () => {
     expect(
       resolveDateRange({
         start_date: '2026-08-24',
@@ -75,9 +80,38 @@ describe('dates', () => {
     });
   });
 
-  it('leaves RFC3339 end_date unchanged', () => {
+  it('bumps a date-only end_date by one day for Toggl', () => {
     expect(
-      resolveDateRange({
+      toTogglApiRange({
+        start_date: '2026-08-24',
+        end_date: '2026-08-24',
+      })
+    ).toEqual({
+      start_date: '2026-08-24',
+      end_date: '2026-08-25',
+    });
+    expect(
+      toTogglApiRange({
+        start_date: '2026-08-24',
+        end_date: '2026-08-25',
+      })
+    ).toEqual({
+      start_date: '2026-08-24',
+      end_date: '2026-08-26',
+    });
+  });
+
+  it('maps period today to a one-day Toggl window', () => {
+    const now = new Date(2026, 7, 25, 15, 30, 0);
+    expect(toTogglApiRange(resolveDateRange({ period: 'today', now }))).toEqual({
+      start_date: '2026-08-25',
+      end_date: '2026-08-26',
+    });
+  });
+
+  it('leaves RFC3339 end_date unchanged for Toggl', () => {
+    expect(
+      toTogglApiRange({
         start_date: '2026-08-24T00:00:00Z',
         end_date: '2026-08-24T23:59:59Z',
       })
